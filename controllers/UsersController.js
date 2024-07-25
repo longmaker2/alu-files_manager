@@ -1,59 +1,51 @@
-/* eslint-disable */
+import sha1 from 'sha1';
+import Queue from 'bull';
 import { ObjectId } from 'mongodb';
 import dbClient from '../utils/db';
-import redisClient from '../utils/redis';
+import getIdAndKey from '../utils/users';
 
-const sha1 = require('sha1');
+const userQ = new Queue('userQ');
 
-// POST /users should create a new user in DB
-export async function postNew(req, res) {
+class UsersController {
+  static async postNew(req, res) {
+    const { email, password } = req.body;
 
-  try {
-    const userEmail = req.body.email;
-    if (!userEmail) {
-      return res.status(400).send({
-        error: 'Missing email',
-      });
-    }
+    if (!email) return res.status(400).send({ error: 'Missing email' });
+    if (!password) return res.status(400).send({ error: 'Missing password' });
+    const emailExists = await dbClient.users.findOne({ email });
+    if (emailExists) return res.status(400).send({ error: 'Already exist' });
 
-    const userPassword = req.body.password;
-    if (!userPassword) {
-      return res.status(400).send({
-        error: 'Missing password',
-      });
-    }
-    
-    let existingEmail = await dbClient.db.collection('users').findOne({ email: userEmail });
-    if (existingEmail) {
-      return res.status(400).send({
-        error: 'Already exist',
-      });
-    }
+    const secPass = sha1(password);
 
-    let userId;
-    const hashedPw = sha1(userPassword);
-    const newUser = {
-      email: userEmail,
-      password: hashedPw,
+    const insertStat = await dbClient.users.insertOne({
+      email,
+      password: secPass,
+    });
+
+    const createdUser = {
+      id: insertStat.insertedId,
+      email,
     };
 
-    try {
-      await dbClient.db.collection('users').insertOne(newUser, (err) => {
-        userId = newUser._id;
-        return res.status(201).send({
-          email: userEmail,
-          id: userId,
-        });
-      });
-    } catch (err) {
-      return res.status(err.status).send({
-        'error': err,
-      });
-    }
-
-  } catch (error) {
-    return res.status(500).send({
-      error: 'Server error',
+    await userQ.add({
+      userId: insertStat.insertedId.toString(),
     });
+
+    return res.status(201).send(createdUser);
+  }
+
+  static async getMe(req, res) {
+    const { userId } = await getIdAndKey(req);
+
+    const user = await dbClient.users.findOne({ _id: ObjectId(userId) });
+    if (!user) return res.status(401).send({ error: 'Unauthorized' });
+
+    const userInfo = { id: user._id, ...user };
+    delete userInfo._id;
+    delete userInfo.password;
+
+    return res.status(200).send(userInfo);
   }
 }
+
+export default UsersController;
