@@ -30,11 +30,9 @@ class FilesController {
     if (!user) {
       return response.status(401).json({ error: "Unauthorized" });
     }
-    const { name } = request.body;
-    const { type } = request.body;
-    const { parentId } = request.body;
+    const { name, type, parentId, data } = request.body;
     const isPublic = request.body.isPublic || false;
-    const { data } = request.body;
+
     if (!name) {
       return response.status(400).json({ error: "Missing name" });
     }
@@ -82,7 +80,6 @@ class FilesController {
       const filePath = process.env.FOLDER_PATH || "/tmp/files_manager";
       const fileName = `${filePath}/${uuidv4()}`;
       const buff = Buffer.from(data, "base64");
-      // const storeThis = buff.toString('utf-8');
       try {
         try {
           await fs.mkdir(filePath);
@@ -177,10 +174,9 @@ class FilesController {
             delete tmpFile.localPath;
             return tmpFile;
           });
-          // console.log(final);
           return response.status(200).json(final);
         }
-        console.log("Error occured");
+        console.log("Error occurred");
         return response.status(404).json({ error: "Not found" });
       });
     return null;
@@ -242,7 +238,6 @@ class FilesController {
       if (!file) {
         return response.status(404).json({ error: "Not found" });
       }
-      console.log(file.localPath);
       if (file.isPublic) {
         if (file.type === "folder") {
           return response
